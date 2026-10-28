@@ -1,2 +1,5 @@
-// Preencha somente com dados PUBLICOS de um projeto Supabase. NUNCA insira service_role ou senhas aqui.
-window.GUARDIOES_CONFIG = { supabaseUrl: '', supabaseAnonKey: '' };
+// Chave publicável: segura no navegador com políticas RLS ativas. Nunca inserir service_role.
+window.GUARDIOES_CONFIG = {
+  supabaseUrl: 'https://vztdhteljfmgrbpwilik.supabase.co',
+  supabaseAnonKey: 'sb_publishable_0kD8ZD67BYYrvwxO29FDQw_5RuYA8JR'
+};
