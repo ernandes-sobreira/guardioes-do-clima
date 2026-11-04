@@ -2,29 +2,92 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const cfg=window.GUARDIOES_CONFIG||{};const online=Boolean(cfg.supabaseUrl&&cfg.supabaseAnonKey);let supa=null,session=null,channel=null,installPrompt=null;
 const places=['Pátio','Jardim / horta','Quadra','Sala de aula','Área arborizada'];
 const metrics={temperature:['Temperatura','°C','🌡️'],humidity:['Umidade','%','💧'],pressure:['Pressão','hPa','⚖️'],wind:['Vento','m/s','🌀'],rain:['Chuva','mm','🌧️']};
-let rows=[];
+let rows=[];let accessRole=null;
 function dt(s){const d=new Date(s);return isNaN(d)?'—':d.toLocaleDateString('pt-BR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'})}
 function fmt(v,d=1){return v===null||v===undefined||v===''?'—':Number(v).toLocaleString('pt-BR',{maximumFractionDigits:d,minimumFractionDigits:d})}
 function getPlaces(){return [...new Set([...places,...rows.map(r=>r.place)])]}
-function initSelects(){for(const sel of ['#place','#placeFilter']){let el=$(sel),val=el.value;el.innerHTML=(sel==='#placeFilter'?'<option value="all">Todos os locais</option>':'')+getPlaces().map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');if(val)el.value=val}}
+function initSelects(){for(const sel of ['#place','#placeFilter']){let el=$(sel),val=el.value;el.innerHTML=(sel==='#placeFilter'?'<option value="all">Toda a escola</option>':'')+getPlaces().map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('');if(val)el.value=val}}
 function esc(s){return String(s).replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]))}
 function selectedRows(){let p=$('#placeFilter').value;return rows.filter(r=>p==='all'||r.place===p).sort((a,b)=>new Date(a.observed_at)-new Date(b.observed_at))}
 function latest(xs,m){return [...xs].reverse().find(r=>r[m]!=null&&r[m]!=='')?.[m]}
-function render(){initSelects();let subset=selectedRows();$('#cards').innerHTML=Object.entries(metrics).map(([m,[name,unit,emoji]])=>`<div class="stat"><div class="statname">${emoji} ${name}</div><div class="val">${fmt(latest(subset,m))} <small>${unit}</small></div><div class="tag">${subset.filter(r=>r[m]!=null).length} medições</div></div>`).join('');let lm=$('#metricFilter').value;$('#chartTitle').textContent=metrics[lm][0]+' ao longo do tempo';lineChart(subset,lm);$('#lastEntries').innerHTML=[...rows].sort((a,b)=>new Date(b.observed_at)-new Date(a.observed_at)).slice(0,5).map(r=>`<div class="entry"><span>${r.temperature==null?'—':fmt(r.temperature)+' °C'}</span><b>${esc(r.place)}</b><small>${dt(r.observed_at)} · ${esc(r.notes||'Registro de campo')}</small></div>`).join('')||'<p>Sem medições ainda.</p>';$('#updated').textContent=rows.length?'Medições reais enviadas pelos Guardiões':'Aguardando as primeiras medições reais';compare()}
+function render(){
+  initSelects();
+  const subset=selectedRows(), recent=[...subset].sort((a,b)=>new Date(b.observed_at)-new Date(a.observed_at))[0];
+  $('#emptyState').hidden=subset.length>0;
+  $('#cards').hidden=subset.length===0;
+  $('#cards').innerHTML=['temperature','pressure','rain'].map(m=>{
+    const [name,unit,emoji]=metrics[m],value=latest(subset,m);
+    return `<div class="stat"><div class="statname">${emoji} ${name}</div><div class="val">${fmt(value)} <small>${unit}</small></div></div>`;
+  }).join('');
+  const m=$('#metricFilter').value;
+  $('#chartTitle').textContent=metrics[m][0]+' ao longo do tempo';
+  lineChart(subset,m);
+  $('#lastEntries').innerHTML=[...subset].sort((a,b)=>new Date(b.observed_at)-new Date(a.observed_at)).slice(0,5).map(r=>`<div class="entry"><span>${r.temperature==null?'—':fmt(r.temperature)+' °C'}</span><b>${esc(r.place)}</b><small>${dt(r.observed_at)} · ${esc(r.notes||'Medição registrada')}</small></div>`).join('')||'<p>Sem medições neste local.</p>';
+  $('#updated').textContent=recent?'Último registro: '+dt(recent.observed_at):'Aguardando medições';
+  compare();
+}
 function lineChart(xs,m){const pts=xs.filter(r=>Number.isFinite(Number(r[m]))&&r[m]!==null).map(r=>({v:Number(r[m]),date:dt(r.observed_at)}));const target=$('#chartArea');if(!pts.length){target.innerHTML='<p class="muted">Ainda não há medições deste indicador.</p>';return}const W=700,H=240,left=45,right=15,top=22,bottom=44;let lo=Math.min(...pts.map(p=>p.v)),hi=Math.max(...pts.map(p=>p.v));if(lo===hi){lo-=1;hi+=1}let pad=(hi-lo)*.13;lo-=pad;hi+=pad;const X=i=>left+(W-left-right)*(pts.length===1?.5:i/(pts.length-1)),Y=v=>top+(H-top-bottom)*(1-(v-lo)/(hi-lo));let grid=[0,1,2,3,4].map(i=>{let yy=top+i*(H-top-bottom)/4;return `<line x1="${left}" y1="${yy}" x2="${W-right}" y2="${yy}" stroke="#e9f0eb"/><text class="axislabel" x="3" y="${yy+4}">${fmt(hi-(hi-lo)*i/4)}</text>`}).join('');let coords=pts.map((p,i)=>[X(i),Y(p.v)]);let poly=coords.map(p=>p.join(',')).join(' ');let area=`${left},${H-bottom} ${poly} ${coords.at(-1)[0]},${H-bottom}`;let dots=pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.v)}" r="5" fill="#258663" stroke="white" stroke-width="2"><title>${p.date} · ${fmt(p.v)} ${metrics[m][1]}</title></circle>`).join('');let labels=[0,Math.floor((pts.length-1)/2),pts.length-1].filter((n,i,a)=>a.indexOf(n)===i).map(i=>`<text x="${X(i)}" y="${H-12}" class="axislabel" text-anchor="middle">${esc(pts[i].date.split(',')[0])}</text>`).join('');target.innerHTML=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Gráfico de ${metrics[m][0]} com ${pts.length} medições">${grid}<polygon points="${area}" fill="#e1f4e9" opacity=".75"/><polyline points="${poly}" fill="none" stroke="#1d8966" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${dots}${labels}</svg>`}
 function compare(){const m=$('#compareMetric').value;let groups=getPlaces().map(p=>{let xs=rows.filter(r=>r.place===p&&r[m]!==null&&r[m]!==undefined);return {place:p,avg:xs.length?xs.reduce((a,r)=>a+Number(r[m]),0)/xs.length:null,n:xs.length}}).filter(g=>g.n);let max=Math.max(...groups.map(g=>g.avg),1);$('#compareBars').innerHTML=groups.length?groups.map(g=>`<div class="barrow"><b>${esc(g.place)}</b><div class="bartrack"><div class="barfill" style="width:${Math.max(2,g.avg/max*100)}%"></div></div><strong>${fmt(g.avg)} ${metrics[m][1]}</strong></div>`).join(''):'<p class="muted">Ainda não há dados para comparar.</p>'}
 function showTab(t){$$('.page').forEach(e=>e.classList.toggle('active',e.id===t));$$('[data-tab]').forEach(e=>e.classList.toggle('active',e.dataset.tab===t));if(t==='instrumentos')setTimeout(init3D,50);window.scrollTo({top:0,behavior:'smooth'})}
-$$('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));$('#metricFilter').onchange=render;$('#placeFilter').onchange=render;$('#compareMetric').onchange=compare;$$('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).hidden=true);$$('.modal').forEach(m=>m.onclick=e=>{if(e.target===m)m.hidden=true});$('#loginTop').onclick=()=>{$('#authModal').hidden=false};
+$$('[data-tab]').forEach(b=>b.onclick=()=>showTab(b.dataset.tab));$('#metricFilter').onchange=render;$('#placeFilter').onchange=render;$('#compareMetric').onchange=compare;$$('[data-close]').forEach(b=>b.onclick=()=>$('#'+b.dataset.close).hidden=true);$$('.modal').forEach(m=>m.onclick=e=>{if(e.target===m)m.hidden=true});$('#loginTop').onclick=()=>{$('#authModal').hidden=false};$('#loginInline').onclick=()=>{$('#authModal').hidden=false};
 const info={pressure:['Instrumento de pressão','A montagem com garrafa e mangueira foi identificada pelos estudantes como instrumento de pressão. Seu funcionamento e a grandeza exata medida dependem do procedimento experimental e da calibração.','Não converter a leitura da régua diretamente em hPa sem conhecer o princípio e a calibração do aparelho.'],thermo:['Abrigo térmico','O abrigo diminui o aquecimento do sensor pelo Sol e protege contra chuva. O ar precisa circular. Meça na mesma altura e em horários parecidos.','Atenção: papelão e superfície metalizada podem aquecer ou reter calor. Compare o abrigo com um termômetro de referência antes de tratar os dados como temperatura oficial do ar.'],wind:['Anemômetro','O vento empurra as conchas e faz o eixo girar. Contando as voltas em um intervalo de tempo podemos estimar a velocidade, mas é indispensável calibrar o instrumento.','Conte quantas voltas ele dá em 30 segundos e compare com um anemômetro de referência. Sem calibração, registre rotações por minuto (rpm), não m/s.'],rain:['Pluviômetro','A chuva entra pela abertura do coletor. Em recipientes de seção reta, a altura acumulada em milímetros indica chuva em mm. Se a área do gargalo difere da área onde a água fica armazenada, é preciso corrigir pela razão entre as áreas.','1 mm = 1 litro por metro quadrado. Use a área real de captação (A): precipitação (mm) = volume captado (mL) ÷ área (cm²) × 10. Anote o período entre coletas.']};
 $$('.learnBtn').forEach(b=>b.onclick=()=>{let a=info[b.dataset.instrument];$('#infoContent').innerHTML=`<small class="kicker">CONHEÇA O INSTRUMENTO</small><h3>${a[0]}</h3><p>${a[1]}</p><div class="tip">🔬 ${a[2]}</div>`;$('#infoModal').hidden=false});
 $('#observed_at').value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
-$('#measureForm').onsubmit=async e=>{e.preventDefault();let r={place:$('#place').value,observed_at:new Date($('#observed_at').value).toISOString(),notes:$('#notes').value.trim(),conditions:$('#conditions').value,rain_start:$('#rain_start').value?new Date($('#rain_start').value).toISOString():null};for(let k of Object.keys(metrics)){let s=$('#'+k).value;r[k]=s===''?null:Number(s)}let msg=$('#formMsg');if(Object.keys(metrics).every(k=>r[k]===null)){msg.textContent='Preencha pelo menos uma medida.';return}if(r.rain!==null&&r.rain_start===null){msg.textContent='Para registrar chuva, informe o início do período de acumulação.';return}if(r.rain_start&&new Date(r.rain_start)>=new Date(r.observed_at)){msg.textContent='O início do período de chuva deve ser anterior à leitura.';return}if(online){if(!session){msg.textContent='Entre com uma conta autorizada antes de publicar.';$('#authModal').hidden=false;return}let {error}=await supa.from('measurements').insert(r);if(error){msg.textContent='Não foi possível salvar: '+error.message;return}msg.textContent='✓ Medição publicada para todos os aparelhos!';await loadData()}else{msg.textContent='Banco não conectado. Nenhuma medição foi salva.';return}e.target.reset();$('#observed_at').value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)};
+$('#measureForm').onsubmit=async e=>{e.preventDefault();let r={place:$('#place').value,observed_at:new Date($('#observed_at').value).toISOString(),notes:$('#notes').value.trim(),conditions:$('#conditions').value,rain_start:$('#rain_start').value?new Date($('#rain_start').value).toISOString():null};for(let k of Object.keys(metrics)){let s=$('#'+k).value;r[k]=s===''?null:Number(s)}let msg=$('#formMsg');if(Object.keys(metrics).every(k=>r[k]===null)){msg.textContent='Preencha pelo menos uma medida.';return}if(r.rain!==null&&r.rain_start===null){msg.textContent='Para registrar chuva, informe o início do período de acumulação.';return}if(r.rain_start&&new Date(r.rain_start)>=new Date(r.observed_at)){msg.textContent='O início do período de chuva deve ser anterior à leitura.';return}if(online){if(!session||!accessRole){msg.textContent='Entre com uma conta autorizada antes de publicar.';$('#authModal').hidden=false;return}let {error}=await supa.from('measurements').insert(r);if(error){msg.textContent='Não foi possível salvar: '+error.message;return}msg.textContent='✓ Medição publicada!';await loadData();$('#flashMessage').textContent='✓ Medição salva! Ela já aparece nos gráficos.';$('#flashMessage').hidden=false;showTab('painel')}else{msg.textContent='Banco não conectado. Nenhuma medição foi salva.';return}e.target.reset();$('#observed_at').value=new Date(Date.now()-new Date().getTimezoneOffset()*60000).toISOString().slice(0,16)};
 $('#exportCsv').onclick=()=>{let fields=['place','observed_at','temperature','humidity','pressure','wind','rain','rain_start','conditions','notes'];let csv='\ufeff'+[fields.join(';'),...rows.map(r=>fields.map(k=>'"'+String(r[k]??'').replaceAll('"','""')+'"').join(';'))].join('\r\n');let u=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));let a=document.createElement('a');a.href=u;a.download='guardioes-medicoes.csv';a.click();setTimeout(()=>URL.revokeObjectURL(u),1000)};
-async function initCloud(){if(!online){$('#syncStatus').textContent='● Sem conexão configurada';return}try{const mod=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');supa=mod.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);let {data}=await supa.auth.getSession();session=data.session;updateAuth();await loadData();channel=supa.channel('medicoes-pub').on('postgres_changes',{event:'*',schema:'public',table:'measurements'},()=>loadData()).subscribe();$('#syncStatus').textContent='● Conectado ao banco'}catch(e){$('#syncStatus').textContent='● Falha de conexão';console.error(e)}}
+async function initCloud(){
+  if(!online){$('#syncStatus').textContent='Sem banco conectado';return}
+  try{
+    const mod=await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm');
+    supa=mod.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);
+    const {data}=await supa.auth.getSession();
+    session=data.session;
+    await checkAccess();
+    await loadData();
+    supa.auth.onAuthStateChange((_event,newSession)=>{session=newSession;setTimeout(()=>checkAccess(),0)});
+    channel=supa.channel('medicoes-pub').on('postgres_changes',{event:'*',schema:'public',table:'measurements'},()=>loadData()).subscribe();
+    $('#syncStatus').textContent='● Dados conectados';
+  }catch(e){$('#syncStatus').textContent='● Falha de conexão';console.error(e)}
+}
 async function loadData(){let {data,error}=await supa.from('measurements').select('id,place,observed_at,temperature,humidity,pressure,wind,rain,rain_start,conditions,notes').order('observed_at',{ascending:true}).limit(1000);if(error){$('#syncStatus').textContent='● Erro de leitura';console.error(error);return}rows=data||[];render()}
-function updateAuth(){$('#loginTop').textContent=session?'✓ Monitor conectado':'Área do monitor';$('#logoutBtn').hidden=!session;$('#authHint').textContent=session?'Conta conectada: a publicação depende da autorização da escola.':'Para publicar medições reais, entre com uma conta autorizada da equipe.'}
-$('#authForm').onsubmit=async e=>{e.preventDefault();if(!online){$('#authMsg').textContent='Configure o Supabase em config.js para habilitar login e publicação.';return}let {data,error}=await supa.auth.signInWithPassword({email:$('#email').value,password:$('#password').value});if(error){$('#authMsg').textContent=error.message;return}session=data.session;updateAuth();$('#authModal').hidden=true;$('#password').value=''};
-$('#logoutBtn').onclick=async()=>{if(supa)await supa.auth.signOut();session=null;updateAuth();$('#authModal').hidden=true};
+async function checkAccess(){
+  accessRole=null;
+  if(supa&&session?.user?.id){
+    const {data,error}=await supa.from('guardioes_monitors').select('role,enabled').eq('user_id',session.user.id).maybeSingle();
+    if(!error&&data?.enabled&&['monitor','admin'].includes(data.role))accessRole=data.role;
+  }
+  updateAuth();
+}
+function updateAuth(){
+  const approved=Boolean(session&&accessRole);
+  $('#loginTop').textContent=session?'Minha conta':'Entrar';
+  $('#logoutBtn').hidden=!session;
+  $('#authForm').hidden=Boolean(session);
+  $('#measureForm').hidden=!approved;
+  $('#accessGate').hidden=approved;
+  $('#authHint').textContent=approved?'Conta autorizada. Registre o que foi medido.':session?'Esta conta ainda não tem permissão para registrar.':'Qualquer pessoa pode consultar os gráficos. Para registrar, entre com uma conta autorizada.';
+  const gate=$('#accessGate');
+  gate.querySelector('h3').textContent=session?'Sua conta precisa ser liberada.':'Essa parte é para a equipe.';
+  gate.querySelector('p').textContent=session?'Peça ao responsável pelo projeto para autorizar seu e-mail.':'Qualquer pessoa pode ver os gráficos. Para adicionar dados, é preciso entrar.';
+  $('#loginInline').textContent=session?'Ver minha conta':'Entrar para registrar';
+}
+$('#authForm').onsubmit=async e=>{
+  e.preventDefault();
+  if(!online||!supa){$('#authMsg').textContent='O banco de dados não está conectado.';return}
+  const {data,error}=await supa.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#password').value});
+  if(error){$('#authMsg').textContent='E-mail ou senha incorretos. Confira os dados de acesso.';return}
+  session=data.session;
+  $('#password').value='';
+  await checkAccess();
+  if(accessRole){$('#authMsg').textContent='';$('#authModal').hidden=true;showTab('registro')}
+  else{$('#authMsg').textContent='Você entrou, mas esta conta ainda não foi autorizada a registrar medições.'}
+};
+$('#logoutBtn').onclick=async()=>{
+  if(supa)await supa.auth.signOut();
+  session=null;accessRole=null;updateAuth();
+  $('#authMsg').textContent='';
+  $('#authModal').hidden=true;
+};
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();installPrompt=e;$('#installBtn').hidden=false});$('#installBtn').onclick=async()=>{if(installPrompt){installPrompt.prompt();await installPrompt.userChoice;installPrompt=null;$('#installBtn').hidden=true}else alert('No iPhone: toque Compartilhar → Adicionar à Tela de Início. No Android: menu do navegador → Instalar aplicativo.')};
 if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(console.warn);
 render();initCloud();
