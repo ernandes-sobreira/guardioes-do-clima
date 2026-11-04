@@ -25,6 +25,9 @@ create table if not exists public.measurements (
 create index if not exists guardioes_measurements_observed_at_idx on public.measurements(observed_at desc);
 alter table public.guardioes_monitors enable row level security;
 alter table public.measurements enable row level security;
+-- Menor privilégio possível para o site público e a equipe autorizada.
+revoke all privileges on table public.measurements from anon, authenticated;
+revoke all privileges on table public.guardioes_monitors from anon, authenticated;
 grant select on public.measurements to anon, authenticated;
 grant insert,update,delete on public.measurements to authenticated;
 grant select on public.guardioes_monitors to authenticated;
