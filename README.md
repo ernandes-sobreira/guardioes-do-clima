@@ -6,15 +6,36 @@ Aplicativo web instalável (PWA), responsivo para celular e computador, com indi
 
 Na pasta: `python -m http.server 8080` e abrir `http://localhost:8080`. `file://` não permite os recursos PWA de forma confiável.
 
-## Compartilhar dados em tempo real
+## Consultar os gráficos e registrar dados
 
-1. Crie um projeto no Supabase.
-2. Execute `schema.sql` no SQL Editor. Habilite Realtime para `public.measurements` (a instrução SQL já tenta fazer isso; se a tabela já pertencer à publicação, não repita).
-3. Em Authentication, desabilite autoinscrição pública e crie contas de monitor/professor manualmente com senhas exclusivas. Se existirem outros usuários autenticados no projeto, restrinja INSERT a uma allowlist específica.
-4. Em `config.js`, preencha `supabaseUrl` e **somente** a chave `anon`/`publishable` (nunca `service_role` ou senhas).
-5. Publique **toda a pasta** em hospedagem HTTPS (GitHub Pages, Netlify etc.). A instalação PWA exige HTTPS ou localhost. O Supabase Realtime usa internet e funciona entre dispositivos.
+**Público:** abre o aplicativo e vê as medições e os gráficos, sem login.
 
-**Modo demonstração:** com `config.js` vazio, inicia com dados **fictícios**, salva novos registros somente em `localStorage` deste dispositivo e não sincroniza. Nunca trate o conteúdo da demonstração como dados medidos.
+**Coordenação e monitores:** entram com e-mail e senha individuais e, depois de autorizados no banco, podem registrar dados. O acesso é controlado pelo Supabase Auth e pelas políticas RLS. **Não existe senha padrão embutida no site.**
+
+### Primeiro acesso da coordenação
+
+1. Abra [Authentication → Users](https://supabase.com/dashboard/project/vztdhteljfmgrbpwilik/auth/users), clique em **Add user** e crie a conta com e-mail e senha escolhidos pela coordenação. Use uma conta por pessoa; não publique senhas no GitHub.
+2. Abra o [SQL Editor](https://supabase.com/dashboard/project/vztdhteljfmgrbpwilik/sql/new). Substitua o e-mail no comando abaixo pelo mesmo usado ao criar a conta:
+
+```sql
+insert into public.guardioes_monitors (user_id, role, enabled)
+select id, 'admin', true
+from auth.users
+where lower(email) = lower('EMAIL_DA_COORDENACAO')
+on conflict (user_id) do update
+set role = excluded.role, enabled = true;
+```
+
+3. Entre em [Guardiões do Clima](https://ernandes-sobreira.github.io/guardioes-do-clima/) → **Entrar**. A opção **Registrar** mostrará o formulário apenas para contas autorizadas.
+4. Para habilitar professores ou monitores, crie contas individuais e use o mesmo comando trocando `'admin'` por `'monitor'`. Recomendação: que a coordenação gerencie credenciais dos menores com cuidado.
+
+### Banco e publicação
+
+- Projeto Supabase: `guardioes-do-clima`. As tabelas `measurements` e `guardioes_monitors` já estão criadas com RLS.
+- O site lê os dados reais do banco. Não inventa nem substitui valores por dados fictícios.
+- O formulário tem temperatura e pressão em destaque; umidade, vento, chuva e notas ficam em campos opcionais recolhidos.
+- `config.js` contém **apenas** a chave publicável do Supabase, nunca uma senha nem uma chave administrativa.
+- Em caso de publicação por uma conta sem autorização, o banco rejeita o registro.
 
 ## Sobre as imagens e o 3D
 
