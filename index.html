@@ -40,13 +40,13 @@
     <div class="formgrid">
       <label>Local da medição <select id="place" required></select></label>
       <label>Data e hora <input id="observed_at" type="datetime-local" required></label>
-      <label>🌡️ Temperatura (°C) <input id="temperature" type="number" inputmode="decimal" step="0.1" min="-20" max="65" placeholder="Ex.: 29,5"></label>
-      <label>⚖️ Pressão (hPa) <input id="pressure" type="number" inputmode="decimal" step="0.1" min="700" max="1100" placeholder="Ex.: 1006"></label>
+      <label>🌡️ Temperatura (°C) <input id="temperature" type="number" inputmode="decimal" step="any" min="-20" max="65" placeholder="Ex.: 29,5"></label>
+      <label>⚖️ Pressão (hPa) <input id="pressure" type="number" inputmode="decimal" step="any" min="700" max="1100" placeholder="Ex.: 1006"></label>
     </div>
     <details class="form-details"><summary>＋ Outras medidas (se tiver)</summary><div class="formgrid">
-      <label>💧 Umidade do ar (%) <input id="humidity" type="number" inputmode="decimal" step="0.1" min="0" max="100" placeholder="Ex.: 65"></label>
-      <label>🌀 Vento (m/s) <input id="wind" type="number" inputmode="decimal" step="0.1" min="0" max="80" placeholder="Somente se calibrado"></label>
-      <label>🌧️ Chuva (mm) <input id="rain" type="number" inputmode="decimal" step="0.1" min="0" max="2000" placeholder="Ex.: 12"></label>
+      <label>💧 Umidade do ar (%) <input id="humidity" type="number" inputmode="decimal" step="any" min="0" max="100" placeholder="Ex.: 65"></label>
+      <label>🌀 Vento (m/s) <input id="wind" type="number" inputmode="decimal" step="any" min="0" max="80" placeholder="Ex.: 0,08 (calibrado)"></label>
+      <label>🌧️ Chuva (mm) <input id="rain" type="number" inputmode="decimal" step="any" min="0" max="2000" placeholder="Ex.: 12"></label>
       <label>Chuva acumulada desde <input id="rain_start" type="datetime-local"></label>
     </div></details>
     <details class="form-details"><summary>＋ Observações (opcional)</summary><label>Como estava o tempo? <select id="conditions"><option value="">Escolher</option><option>Sol</option><option>Nublado</option><option>Chuva</option><option>Parcialmente nublado</option></select></label><label>O que você observou? <textarea id="notes" rows="2" maxlength="300" placeholder="Sombra, árvores, concreto…"></textarea></label></details>
